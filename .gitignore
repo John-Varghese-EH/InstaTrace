@@ -1,0 +1,40 @@
+# InstaTrace - Ignore Patterns
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+sdist/
+wheels/
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Reports
+instatrace_reports/
+
+# Sessions
+Insta Saved Sessions/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Reference projects
+reference/
