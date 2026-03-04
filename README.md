@@ -8,67 +8,72 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-red.svg)](LICENSE)
 [![PyPI](https://img.shields.io/badge/PyPI-instatrace-green.svg)](https://pypi.org/project/instatrace/)
 
-**The most comprehensive Instagram OSINT tool — extract every possible detail from any Instagram profile.**
+**The most comprehensive Instagram OSINT tool - extract every possible detail from any Instagram profile.**
 
 [Features](#features) · [Installation](#installation) · [Usage](#usage) · [Commands](#commands) · [Export](#export)
 
 </div>
 
 ---
+> [!NOTE]
+> **🚧 Work in Progress:**  
+> This project is actively being developed! Contributions, feedback, and ideas are welcome.  
+> *Star the repo and join the project!*
+---
 
 ## ⚡ Features
 
 ### 🎯 Profile Intelligence
-- **User ID & Username** — Resolve any username to numeric ID
-- **Full Name, Bio, Pronouns** — Complete personal info
-- **Account Type** — Personal / Business / Creator detection
-- **Verification Status** — Blue badge, Meta Verified eligibility
-- **Privacy Status** — Public / Private detection
-- **Business Category** — Industry / niche classification
-- **Account Age Estimation** — Approximate creation year from user ID
+- **User ID & Username** - Resolve any username to numeric ID
+- **Full Name, Bio, Pronouns** - Complete personal info
+- **Account Type** - Personal / Business / Creator detection
+- **Verification Status** - Blue badge, Meta Verified eligibility
+- **Privacy Status** - Public / Private detection
+- **Business Category** - Industry / niche classification
+- **Account Age Estimation** - Approximate creation year from user ID
 
 ### 📊 Statistics & Analytics
-- **Follower / Following Count** — Real-time numbers
-- **Post Count** — Total media on profile
-- **IGTV / Reels / AR Effects Count** — Content breakdown
-- **Story Highlights Count** — Number of highlight reels
-- **Engagement Rate** — Avg likes+comments per post / followers
-- **Follower/Following Ratio Analysis** — Bot detection, influencer scoring
+- **Follower / Following Count** - Real-time numbers
+- **Post Count** - Total media on profile
+- **IGTV / Reels / AR Effects Count** - Content breakdown
+- **Story Highlights Count** - Number of highlight reels
+- **Engagement Rate** - Avg likes+comments per post / followers
+- **Follower/Following Ratio Analysis** - Bot detection, influencer scoring
 
 ### 📧 Contact & Recovery Intelligence
-- **Public Email** — Directly exposed email
-- **Public Phone Number** — With country code
-- **Phone Country Resolution** — Country, region, carrier lookup
-- **Obfuscated Email** — Partial email from recovery flow (e.g., `j***n@g****.com`)
-- **Obfuscated Phone** — Partial phone from recovery flow
-- **WhatsApp Number & Link Status** — WhatsApp integration detection
-- **City / Street Address / ZIP** — Business location data
-- **Email/SMS/WhatsApp Reset Availability** — Recovery method detection
+- **Public Email** - Directly exposed email
+- **Public Phone Number** - With country code
+- **Phone Country Resolution** - Country, region, carrier lookup
+- **Obfuscated Email** - Partial email from recovery flow (e.g., `j***n@g****.com`)
+- **Obfuscated Phone** - Partial phone from recovery flow
+- **WhatsApp Number & Link Status** - WhatsApp integration detection
+- **City / Street Address / ZIP** - Business location data
+- **Email/SMS/WhatsApp Reset Availability** - Recovery method detection
 
 ### 🖼️ Media Extraction
-- **Timeline Posts** — With date filtering, pagination
-- **Post Details** — Likes, comments, location, caption, media URLs
-- **Story Highlights** — Highlight reels with titles and media counts
-- **Tagged Posts** — Posts the user appears in
-- **Comment Extraction** — Full comment data with user info
-- **Media URLs** — HD image/video direct URLs
+- **Timeline Posts** - With date filtering, pagination
+- **Post Details** - Likes, comments, location, caption, media URLs
+- **Story Highlights** - Highlight reels with titles and media counts
+- **Tagged Posts** - Posts the user appears in
+- **Comment Extraction** - Full comment data with user info
+- **Media URLs** - HD image/video direct URLs
 
 ### 👥 Social Graph Analysis
-- **Followers List** — Full extraction with pagination
-- **Following List** — Full extraction with pagination
-- **Mutual Followers** — Compare two accounts
-- **Similar Accounts** — Instagram's suggested related profiles
+- **Followers List** - Full extraction with pagination
+- **Following List** - Full extraction with pagination
+- **Mutual Followers** - Compare two accounts
+- **Similar Accounts** - Instagram's suggested related profiles
 
 ### 🔗 External Intelligence
-- **Bio Link Analysis** — DNS resolution, WHOIS data, domain info
-- **Hashtag Intelligence** — Extract posts from any hashtag
-- **Username Availability Check** — Existence verification
+- **Bio Link Analysis** - DNS resolution, WHOIS data, domain info
+- **Hashtag Intelligence** - Extract posts from any hashtag
+- **Username Availability Check** - Existence verification
 
 ### 📦 Export & Reporting
-- **JSON Export** — Complete structured data
-- **CSV Export** — Spreadsheet-ready
-- **TXT Export** — Human-readable reports
-- **Auto-timestamped** — All exports organized in `instatrace_reports/`
+- **JSON Export** - Complete structured data
+- **CSV Export** - Spreadsheet-ready
+- **TXT Export** - Human-readable reports
+- **Auto-timestamped** - All exports organized in `instatrace_reports/`
 
 ---
 
@@ -127,12 +132,12 @@ python -m instatrace profile -u <username> -s <session_id>
 | Command | Alias | Description |
 |---------|-------|-------------|
 | `profile` | `p` | Full profile intelligence (ID, name, bio, stats, contacts, account type, engagement rate) |
-| `lookup` | `l` | Advanced lookup — obfuscated email/phone from recovery |
+| `lookup` | `l` | Advanced lookup - obfuscated email/phone from recovery |
 | `posts` | `m` | Extract user's timeline posts with date filters |
 | `post-info` | `pi` | Detailed info on a specific post |
 | `followers` | `fl` | Extract full followers list |
 | `following` | `fg` | Extract full following list |
-| `mutual` | — | Find mutual followers between two users |
+| `mutual` | - | Find mutual followers between two users |
 | `hashtag` | `ht` | Extract posts from a hashtag |
 | `similar` | `sim` | Find Instagram-suggested similar accounts |
 | `highlights` | `hl` | Extract story highlight reels |
@@ -203,14 +208,6 @@ This tool is designed for **authorized security research and educational purpose
 
 ---
 
-## 👤 Author
-
-**John-Varghese-EH**
-
-- GitHub: [@John-Varghese-EH](https://github.com/John-Varghese-EH)
-
----
-
 ## 📄 License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).
@@ -222,5 +219,9 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE).
 **⭐ Star this repo if you find it useful!**
 
 Built with ❤️ by [John-Varghese-EH](https://github.com/John-Varghese-EH)
+
+[![Buy me a Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/CyberTrinity)
+[![Patreon](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/CyberTrinity)
+[![Sponsor](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#white)](https://github.com/sponsors/John-Varghese-EH)
 
 </div>
