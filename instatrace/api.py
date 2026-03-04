@@ -7,6 +7,7 @@ import requests
 import json
 import random
 import time
+import re
 from urllib.parse import quote_plus
 from json import dumps
 
@@ -141,17 +142,66 @@ class InstaAPI:
         return None
 
     def get_user_info_by_id(self, user_id):
-        """Get user info via the private API using a numeric user ID."""
+        """Get user info via the private API using a numeric user ID.
+        Works on BOTH public and private accounts when authenticated."""
         url = config.USER_INFO_ENDPOINT.format(user_id)
         resp = self.request(url, headers={"User-Agent": "Instagram 64.0.0.14.96"})
         if resp and "user" in resp:
             return resp["user"]
         return resp
 
+    def get_user_full_detail(self, user_id):
+        """Get FULL user detail info — returns maximum data even for private accounts.
+        This is the most data-rich endpoint. Requires session."""
+        url = f"https://i.instagram.com/api/v1/users/{user_id}/full_detail_info/"
+        resp = self.request(url, headers={"User-Agent": "Instagram 64.0.0.14.96"})
+        return resp
+
     def get_web_profile(self, username):
         """Get user profile via the web profile endpoint."""
         url = config.USER_PROFILE_ENDPOINT.format(username)
         return self.request(url)
+
+    def get_friendship_status(self, user_id):
+        """Get friendship status (following, followed_by, blocking, muting, etc.).
+        Reveals if the authenticated user follows the target (key for private access)."""
+        url = f"https://i.instagram.com/api/v1/friendships/show/{user_id}/"
+        return self.request(url, headers={"User-Agent": "Instagram 64.0.0.14.96"})
+
+    def get_user_stories(self, user_id):
+        """Get current active stories for a user. Works for private if you follow them."""
+        url = config.STORY_ENDPOINT.format(user_id)
+        return self.request(url, headers={"User-Agent": "Instagram 64.0.0.14.96"})
+
+    def scrape_profile_page(self, username):
+        """Scrape the public Instagram profile page HTML for embedded JSON data.
+        Fallback method — can extract data even without API access."""
+        url = f"https://www.instagram.com/{username}/"
+        headers = {
+            "User-Agent": config.random_ua(),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        try:
+            resp = self.session.get(url, headers=headers, timeout=config.REQUEST_TIMEOUT)
+            if resp.status_code != 200:
+                return None
+            # Try to extract shared_data JSON from page
+            matches = re.findall(r'window\._sharedData\s*=\s*({.+?});', resp.text)
+            if matches:
+                return json.loads(matches[0])
+            # Try script type="application/json" blocks
+            json_blocks = re.findall(r'<script type="application/json"[^>]*>(.+?)</script>', resp.text)
+            for block in json_blocks:
+                try:
+                    data = json.loads(block)
+                    if isinstance(data, dict):
+                        return data
+                except:
+                    continue
+            return {"raw_html_length": len(resp.text)}
+        except Exception as e:
+            return None
 
     def advanced_lookup(self, username):
         """
@@ -256,6 +306,16 @@ class InstaAPI:
         """Search Instagram users by query."""
         url = config.USER_SEARCH_ENDPOINT.format(query)
         return self.request(url)
+
+    def get_user_by_search(self, username):
+        """Search for a user and return their data from search results.
+        Alternative data source that works for private accounts."""
+        resp = self.search_users(username)
+        if resp and "users" in resp:
+            for u in resp["users"]:
+                if u.get("user", {}).get("username", "").lower() == username.lower():
+                    return u.get("user")
+        return None
 
     def check_username(self, username):
         """Check if a username exists by trying to fetch the profile page."""

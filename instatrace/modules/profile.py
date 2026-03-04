@@ -54,12 +54,13 @@ def extract_profile(api, username):
         "category_enum": user.get("category_enum"),
     }
 
-    # Step 2: Private API info (if session is available)
+    # Step 2: Private API info (works on BOTH public and private accounts)
     if user_id:
         print_status("Fetching extended info via private API...", "info")
         priv = api.get_user_info_by_id(user_id)
         if priv and isinstance(priv, dict) and "error" not in priv:
             profile.update({
+                # Contact info
                 "public_email": priv.get("public_email"),
                 "public_phone_number": priv.get("public_phone_number"),
                 "public_phone_country_code": priv.get("public_phone_country_code"),
@@ -69,20 +70,122 @@ def extract_profile(api, username):
                 "address_street": priv.get("address_street"),
                 "zip": priv.get("zip"),
                 "contact_phone_number": priv.get("contact_phone_number"),
+                "direct_messaging": priv.get("direct_messaging"),
+                "fb_page_call_to_action_id": priv.get("fb_page_call_to_action_id"),
+                # Account flags
                 "is_memorialized": priv.get("is_memorialized"),
                 "is_new_to_instagram": priv.get("is_new_to_instagram"),
-                "total_igtv_videos": priv.get("total_igtv_videos"),
-                "total_clips_count": priv.get("total_clips_count"),
-                "total_ar_effects": priv.get("total_ar_effects"),
-                "hd_profile_pic_url": priv.get("hd_profile_pic_url_info", {}).get("url"),
                 "has_anonymous_profile_picture": priv.get("has_anonymous_profile_picture"),
                 "account_type": priv.get("account_type"),
                 "is_eligible_for_meta_verified": priv.get("is_eligible_for_meta_verified"),
+                "is_meta_verified": priv.get("is_verified_by_mv4b"),
                 "transparency_product_enabled": priv.get("transparency_product_enabled"),
-                "mutual_followers_count": priv.get("mutual_followers_count"),
                 "has_biography_translation": priv.get("has_biography_translation"),
                 "bio_entities": priv.get("biography_with_entities"),
+                # Content counts
+                "total_igtv_videos": priv.get("total_igtv_videos"),
+                "total_clips_count": priv.get("total_clips_count"),
+                "total_ar_effects": priv.get("total_ar_effects"),
+                "mutual_followers_count": priv.get("mutual_followers_count"),
+                # Profile picture (all resolutions)
+                "hd_profile_pic_url": priv.get("hd_profile_pic_url_info", {}).get("url"),
+                "profile_pic_id": priv.get("profile_pic_id"),
+                # Interop & linked accounts
+                "is_interest_account": priv.get("is_interest_account"),
+                "has_chaining": priv.get("has_chaining"),
+                "is_favorite": priv.get("is_favorite"),
+                "is_favorite_for_stories": priv.get("is_favorite_for_stories"),
+                "is_favorite_for_highlights": priv.get("is_favorite_for_highlights"),
+                "live_subscription_status": priv.get("live_subscription_status"),
+                "is_eligible_for_sms_two_factor": priv.get("is_eligible_for_sms_two_factor"),
+                "can_hide_category": priv.get("can_hide_category"),
+                "can_hide_public_contacts": priv.get("can_hide_public_contacts"),
+                "should_show_category": priv.get("should_show_category"),
+                "should_show_public_contacts": priv.get("should_show_public_contacts"),
+                # Supervision / family
+                "is_supervised_user": priv.get("is_supervised_user"),
+                "is_guardian_of_viewer": priv.get("is_guardian_of_viewer"),
+                "guardian_id": priv.get("guardian_id"),
+                # Shopping & monetization
+                "is_eligible_for_shopping": priv.get("is_eligible_for_shopping"),
+                "is_shopping_auto_highlight_eligible": priv.get("is_shopping_auto_highlight_eligible"),
+                "is_shopping_seller": priv.get("is_shopping_seller"),
+                "fan_club_info": priv.get("fan_club_info"),
+                # Reels / content
+                "has_reels": priv.get("has_reels"),
+                "latest_reel_media": priv.get("latest_reel_media"),
+                "has_highlight_reels": priv.get("has_highlight_reels"),
+                "is_bestie": priv.get("is_bestie"),
+                "has_unseen_besties_media": priv.get("has_unseen_besties_media"),
+                # Threads / interop
+                "is_threads_user": priv.get("is_threads_user"),
+                "threads_app_available": priv.get("third_party_downloads_enabled"),
+                "interop_messaging_user_fbid": priv.get("interop_messaging_user_fbid"),
+                # Linked Facebook
+                "linked_fb_user": priv.get("linked_fb_user"),
+                "fb_id_v2": priv.get("fbid_v2"),
+                "page_id": priv.get("page_id"),
+                "page_name": priv.get("page_name"),
             })
+
+        # Step 2b: Full detail info (maximum data — works on private if you follow them)
+        print_status("Fetching full detail info (max data)...", "info")
+        full_detail = api.get_user_full_detail(user_id)
+        if full_detail and isinstance(full_detail, dict) and "user_detail" in full_detail:
+            detail = full_detail.get("user_detail", {})
+            user_detail = detail.get("user", {})
+            # Merge any fields we didn't get from basic info
+            for key, val in user_detail.items():
+                if key not in profile or profile.get(key) is None:
+                    profile[key] = val
+            # Feed & media previews from full detail (even private if followed)
+            feed_items = detail.get("feed", {}).get("items", [])
+            profile["recent_post_count_visible"] = len(feed_items)
+            if feed_items:
+                profile["last_post_timestamp"] = feed_items[0].get("taken_at")
+                import datetime
+                try:
+                    profile["last_post_date"] = datetime.datetime.fromtimestamp(
+                        feed_items[0]["taken_at"]).strftime("%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
+
+        # Step 2c: Friendship status (following, blocked, muted, etc.)
+        print_status("Checking friendship/relationship status...", "info")
+        friendship = api.get_friendship_status(user_id)
+        if friendship and isinstance(friendship, dict) and "error" not in friendship:
+            profile["friendship"] = {
+                "following": friendship.get("following"),
+                "followed_by": friendship.get("followed_by"),
+                "blocking": friendship.get("blocking"),
+                "muting": friendship.get("muting"),
+                "is_muting_reel": friendship.get("is_muting_reel"),
+                "is_muting_notes": friendship.get("is_muting_notes"),
+                "outgoing_request": friendship.get("outgoing_request"),
+                "incoming_request": friendship.get("incoming_request"),
+                "is_bestie": friendship.get("is_bestie"),
+                "is_restricted": friendship.get("is_restricted"),
+                "is_feed_favorite": friendship.get("is_feed_favorite"),
+                "subscribed": friendship.get("subscribed"),
+                "is_eligible_to_subscribe": friendship.get("is_eligible_to_subscribe"),
+            }
+            # Private account access note
+            if profile.get("is_private"):
+                if friendship.get("following"):
+                    profile["_private_access"] = "ACCESSIBLE (you follow this private account)"
+                else:
+                    profile["_private_access"] = "LIMITED (private account — you don't follow them)"
+
+        # Step 2d: Active stories count
+        print_status("Checking active stories...", "info")
+        stories = api.get_user_stories(user_id)
+        if stories and "reels" in stories:
+            reels = stories.get("reels", {})
+            reel = reels.get(str(user_id), {})
+            story_items = reel.get("items", [])
+            profile["active_stories_count"] = len(story_items)
+            if story_items:
+                profile["latest_story_timestamp"] = story_items[0].get("taken_at")
 
     # Step 3: Estimate account age from user ID
     profile["estimated_account_age"] = _estimate_account_age(user_id)
@@ -301,6 +404,8 @@ def display_profile(profile):
     print_field("Est. Account Age", profile.get("estimated_account_age"))
     print_field("Account Country", profile.get("account_country"))
     print_field("Date Verified", profile.get("date_verified"))
+    print_field("Last Post Date", profile.get("last_post_date"))
+    print_field("Active Stories", profile.get("active_stories_count"))
     print_field("Running Ads", bool_icon(profile.get("is_running_ads")) if profile.get("is_running_ads") is not None else None)
     print_field("Memorial Account", bool_icon(profile.get("is_memorialized")) if profile.get("is_memorialized") is not None else None)
     print_field("New to Instagram", bool_icon(profile.get("is_new_to_instagram")) if profile.get("is_new_to_instagram") is not None else None)
@@ -309,7 +414,50 @@ def display_profile(profile):
     print_field("Has Clips/Reels", bool_icon(profile.get("has_clips")) if profile.get("has_clips") is not None else None)
     print_field("Anonymous Profile Pic", bool_icon(profile.get("has_anonymous_profile_picture")) if profile.get("has_anonymous_profile_picture") is not None else None)
     print_field("Meta Verified Eligible", bool_icon(profile.get("is_eligible_for_meta_verified")) if profile.get("is_eligible_for_meta_verified") is not None else None)
+    print_field("Meta Verified", bool_icon(profile.get("is_meta_verified")) if profile.get("is_meta_verified") is not None else None)
     print_field("Transparency Product", bool_icon(profile.get("transparency_product_enabled")) if profile.get("transparency_product_enabled") is not None else None)
+    print_field("Supervised User", bool_icon(profile.get("is_supervised_user")) if profile.get("is_supervised_user") is not None else None)
+
+    # Private Account Access
+    if profile.get("is_private"):
+        print_section("PRIVATE ACCOUNT STATUS")
+        access = profile.get("_private_access", "NO SESSION — cannot determine access")
+        color = C.SUCCESS if "ACCESSIBLE" in access else C.WARNING
+        print(f"  {color}  {access}{C.RESET}")
+
+    # Friendship / Relationship Status
+    friendship = profile.get("friendship")
+    if friendship:
+        print_section("RELATIONSHIP STATUS")
+        print_field("Following", bool_icon(friendship.get("following")))
+        print_field("Followed By", bool_icon(friendship.get("followed_by")))
+        print_field("Blocking", bool_icon(friendship.get("blocking")))
+        print_field("Muting", bool_icon(friendship.get("muting")))
+        print_field("Muting Reels", bool_icon(friendship.get("is_muting_reel")))
+        print_field("Muting Notes", bool_icon(friendship.get("is_muting_notes")))
+        print_field("Outgoing Request", bool_icon(friendship.get("outgoing_request")))
+        print_field("Incoming Request", bool_icon(friendship.get("incoming_request")))
+        print_field("Close Friend", bool_icon(friendship.get("is_bestie")))
+        print_field("Restricted", bool_icon(friendship.get("is_restricted")))
+        print_field("Feed Favorite", bool_icon(friendship.get("is_feed_favorite")))
+        print_field("Subscribed", bool_icon(friendship.get("subscribed")))
+
+    # Linked Accounts
+    if profile.get("fb_id_v2") or profile.get("page_id") or profile.get("is_threads_user"):
+        print_section("LINKED ACCOUNTS")
+        print_field("Facebook ID", profile.get("fb_id_v2"))
+        print_field("Facebook Page ID", profile.get("page_id"))
+        print_field("Facebook Page Name", profile.get("page_name"))
+        print_field("Threads User", bool_icon(profile.get("is_threads_user")) if profile.get("is_threads_user") is not None else None)
+        print_field("Interop FB ID", profile.get("interop_messaging_user_fbid"))
+
+    # Shopping & Monetization
+    if any(profile.get(k) for k in ["is_eligible_for_shopping", "is_shopping_seller", "fan_club_info"]):
+        print_section("SHOPPING & MONETIZATION")
+        print_field("Shopping Eligible", bool_icon(profile.get("is_eligible_for_shopping")))
+        print_field("Shopping Seller", bool_icon(profile.get("is_shopping_seller")))
+        if profile.get("fan_club_info") and isinstance(profile["fan_club_info"], dict):
+            print_field("Fan Club", profile["fan_club_info"].get("fan_club_name"))
 
     # Former Usernames
     former = profile.get("former_usernames", [])
