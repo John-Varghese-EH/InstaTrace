@@ -54,13 +54,12 @@ def extract_profile(api, username):
         "category_enum": user.get("category_enum"),
     }
 
-    # Step 2: Private API info (works on BOTH public and private accounts)
-    if user_id:
+    # Step 2: Private API info (requires session — works on BOTH public and private)
+    if user_id and api.has_session:
         print_status("Fetching extended info via private API...", "info")
         priv = api.get_user_info_by_id(user_id)
         if priv and isinstance(priv, dict) and "error" not in priv:
             profile.update({
-                # Contact info
                 "public_email": priv.get("public_email"),
                 "public_phone_number": priv.get("public_phone_number"),
                 "public_phone_country_code": priv.get("public_phone_country_code"),
@@ -72,7 +71,6 @@ def extract_profile(api, username):
                 "contact_phone_number": priv.get("contact_phone_number"),
                 "direct_messaging": priv.get("direct_messaging"),
                 "fb_page_call_to_action_id": priv.get("fb_page_call_to_action_id"),
-                # Account flags
                 "is_memorialized": priv.get("is_memorialized"),
                 "is_new_to_instagram": priv.get("is_new_to_instagram"),
                 "has_anonymous_profile_picture": priv.get("has_anonymous_profile_picture"),
@@ -82,63 +80,45 @@ def extract_profile(api, username):
                 "transparency_product_enabled": priv.get("transparency_product_enabled"),
                 "has_biography_translation": priv.get("has_biography_translation"),
                 "bio_entities": priv.get("biography_with_entities"),
-                # Content counts
                 "total_igtv_videos": priv.get("total_igtv_videos"),
                 "total_clips_count": priv.get("total_clips_count"),
                 "total_ar_effects": priv.get("total_ar_effects"),
                 "mutual_followers_count": priv.get("mutual_followers_count"),
-                # Profile picture (all resolutions)
                 "hd_profile_pic_url": priv.get("hd_profile_pic_url_info", {}).get("url"),
                 "profile_pic_id": priv.get("profile_pic_id"),
-                # Interop & linked accounts
                 "is_interest_account": priv.get("is_interest_account"),
                 "has_chaining": priv.get("has_chaining"),
                 "is_favorite": priv.get("is_favorite"),
                 "is_favorite_for_stories": priv.get("is_favorite_for_stories"),
                 "is_favorite_for_highlights": priv.get("is_favorite_for_highlights"),
                 "live_subscription_status": priv.get("live_subscription_status"),
-                "is_eligible_for_sms_two_factor": priv.get("is_eligible_for_sms_two_factor"),
-                "can_hide_category": priv.get("can_hide_category"),
-                "can_hide_public_contacts": priv.get("can_hide_public_contacts"),
-                "should_show_category": priv.get("should_show_category"),
-                "should_show_public_contacts": priv.get("should_show_public_contacts"),
-                # Supervision / family
                 "is_supervised_user": priv.get("is_supervised_user"),
                 "is_guardian_of_viewer": priv.get("is_guardian_of_viewer"),
                 "guardian_id": priv.get("guardian_id"),
-                # Shopping & monetization
                 "is_eligible_for_shopping": priv.get("is_eligible_for_shopping"),
-                "is_shopping_auto_highlight_eligible": priv.get("is_shopping_auto_highlight_eligible"),
                 "is_shopping_seller": priv.get("is_shopping_seller"),
                 "fan_club_info": priv.get("fan_club_info"),
-                # Reels / content
                 "has_reels": priv.get("has_reels"),
                 "latest_reel_media": priv.get("latest_reel_media"),
                 "has_highlight_reels": priv.get("has_highlight_reels"),
                 "is_bestie": priv.get("is_bestie"),
-                "has_unseen_besties_media": priv.get("has_unseen_besties_media"),
-                # Threads / interop
                 "is_threads_user": priv.get("is_threads_user"),
-                "threads_app_available": priv.get("third_party_downloads_enabled"),
                 "interop_messaging_user_fbid": priv.get("interop_messaging_user_fbid"),
-                # Linked Facebook
                 "linked_fb_user": priv.get("linked_fb_user"),
                 "fb_id_v2": priv.get("fbid_v2"),
                 "page_id": priv.get("page_id"),
                 "page_name": priv.get("page_name"),
             })
 
-        # Step 2b: Full detail info (maximum data — works on private if you follow them)
+        # Full detail info (maximum data)
         print_status("Fetching full detail info (max data)...", "info")
         full_detail = api.get_user_full_detail(user_id)
         if full_detail and isinstance(full_detail, dict) and "user_detail" in full_detail:
             detail = full_detail.get("user_detail", {})
             user_detail = detail.get("user", {})
-            # Merge any fields we didn't get from basic info
             for key, val in user_detail.items():
                 if key not in profile or profile.get(key) is None:
                     profile[key] = val
-            # Feed & media previews from full detail (even private if followed)
             feed_items = detail.get("feed", {}).get("items", [])
             profile["recent_post_count_visible"] = len(feed_items)
             if feed_items:
@@ -150,7 +130,7 @@ def extract_profile(api, username):
                 except:
                     pass
 
-        # Step 2c: Friendship status (following, blocked, muted, etc.)
+        # Friendship status
         print_status("Checking friendship/relationship status...", "info")
         friendship = api.get_friendship_status(user_id)
         if friendship and isinstance(friendship, dict) and "error" not in friendship:
@@ -169,14 +149,13 @@ def extract_profile(api, username):
                 "subscribed": friendship.get("subscribed"),
                 "is_eligible_to_subscribe": friendship.get("is_eligible_to_subscribe"),
             }
-            # Private account access note
             if profile.get("is_private"):
                 if friendship.get("following"):
                     profile["_private_access"] = "ACCESSIBLE (you follow this private account)"
                 else:
                     profile["_private_access"] = "LIMITED (private account — you don't follow them)"
 
-        # Step 2d: Active stories count
+        # Active stories
         print_status("Checking active stories...", "info")
         stories = api.get_user_stories(user_id)
         if stories and "reels" in stories:
@@ -186,6 +165,32 @@ def extract_profile(api, username):
             profile["active_stories_count"] = len(story_items)
             if story_items:
                 profile["latest_story_timestamp"] = story_items[0].get("taken_at")
+
+    elif user_id and not api.has_session:
+        # ── SESSIONLESS / PUBLIC MODE ─────────────────────────────────
+        print_status("Running in PUBLIC mode (no session ID provided)", "warning")
+        print_status("Use -s <session_id> for full 60+ field extraction", "dim")
+
+        # Search-based extraction (works without session)
+        print_status("Extracting data via search API...", "info")
+        search_data = api.get_user_by_search(username)
+        if search_data and isinstance(search_data, dict):
+            profile["full_name"] = profile.get("full_name") or search_data.get("full_name")
+            profile["has_anonymous_profile_picture"] = search_data.get("has_anonymous_profile_picture")
+            profile["latest_reel_media"] = search_data.get("latest_reel_media")
+
+        # HTML page scraping (fallback — no session needed)
+        print_status("Scraping public profile page for extra data...", "info")
+        scraped = api.scrape_profile_page(username)
+        if scraped and isinstance(scraped, dict):
+            try:
+                entry = scraped.get("entry_data", {}).get("ProfilePage", [{}])[0]
+                graphql_user = entry.get("graphql", {}).get("user", {})
+                if graphql_user:
+                    profile["public_email"] = graphql_user.get("business_email")
+                    profile["business_category"] = profile.get("business_category") or graphql_user.get("category_name")
+            except:
+                pass
 
     # Step 3: Estimate account age from user ID
     profile["estimated_account_age"] = _estimate_account_age(user_id)

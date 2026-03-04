@@ -97,17 +97,32 @@ pip install -r requirements.txt
 
 ### Quick Start
 ```bash
-# Full profile intelligence
+# Full profile intelligence (with session — 60+ fields)
 instatrace profile -u <username> -s <session_id>
 
 # Full scan (runs ALL modules)
 instatrace fullscan -u <username> -s <session_id>
 
-# No session required
+# No session required (public mode)
+instatrace profile -u <username>
 instatrace lookup -u <username>
 instatrace check -u <username>
 instatrace biolink --url https://example.com
 ```
+
+### 🔓 Sessionless Mode (No Login Required)
+
+Many commands work **without** a session ID. In public mode, the tool extracts data via web profile API, search fallback, HTML scraping, recovery endpoint, and engagement analysis.
+
+| Works without session | Requires session |
+|--|--|
+| `profile` (public fields) | `followers` / `following` |
+| `lookup` (obfuscated data) | `posts` / `post-info` |
+| `check` (username exists) | `highlights` / `tagged` |
+| `biolink` (WHOIS) | `comments` / `mutual` |
+| `ratio` (public counts) | `similar` / `fullscan` |
+
+> **Tip:** Use `-s <session_id>` for full 60+ field extraction including contacts, friendship status, stories, linked accounts, and more.
 
 ### Getting Your Session ID
 1. Log into Instagram in your browser

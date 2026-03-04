@@ -40,6 +40,11 @@ class InstaAPI:
 
         self._setup_session()
 
+    @property
+    def has_session(self):
+        """Check if a valid session ID is available."""
+        return bool(self.session_id or self.session_ids)
+
     def _setup_session(self):
         """Configure session headers and cookies."""
         self.session.headers.update({
