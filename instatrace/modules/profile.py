@@ -16,43 +16,112 @@ def extract_profile(api, username):
     """
     print_status(f"Fetching profile data for @{username}...", "info")
 
-    # Step 1: Web profile (public data)
+    # Step 1: Web profile (primary public data)
+    profile = {}
+    user_id = None
     web_data = api.get_web_profile(username)
-    if not web_data or "error" in web_data:
-        error = web_data.get("error", "unknown") if web_data else "no response"
-        print_status(f"Failed to fetch profile: {error}", "error")
+    
+    if web_data and "data" in web_data and web_data["data"].get("user"):
+        user = web_data["data"]["user"]
+        user_id = user.get("id")
+        profile.update({
+            "user_id": user_id,
+            "username": user.get("username"),
+            "full_name": user.get("full_name"),
+            "biography": user.get("biography"),
+            "bio_links": [link.get("url") for link in user.get("bio_links", [])],
+            "external_url": user.get("external_url"),
+            "profile_pic_url": user.get("profile_pic_url_hd"),
+            "is_private": user.get("is_private"),
+            "is_verified": user.get("is_verified"),
+            "is_business": user.get("is_business_account"),
+            "business_category": user.get("category_name"),
+            "follower_count": user.get("edge_followed_by", {}).get("count", 0),
+            "following_count": user.get("edge_follow", {}).get("count", 0),
+            "media_count": user.get("edge_owner_to_timeline_media", {}).get("count", 0),
+            "is_joined_recently": user.get("is_joined_recently"),
+            "has_channel": user.get("has_channel"),
+            "has_guides": user.get("has_guides"),
+            "highlight_reel_count": user.get("highlight_reel_count"),
+            "has_clips": user.get("has_clips"),
+            "pronouns": user.get("pronouns", []),
+            "is_professional": user.get("is_professional_account"),
+            "category_enum": user.get("category_enum"),
+        })
+    else:
+        # Step 1 fallback: Try to find user via search and scraping if main API is blocked
+        error = web_data.get("error", "unknown") if (web_data and isinstance(web_data, dict)) else "no response"
+        print_status(f"Primary API blocked ({error}) — attempting fallbacks...", "warning")
+        
+        # Fallback A: Search API
+        search_data = api.get_user_by_search(username)
+        if search_data and isinstance(search_data, dict):
+            user_id = search_data.get("pk") or search_data.get("id")
+            if user_id:
+                print_status(f"Recovered user ID via search: {user_id}", "success")
+                profile.update({
+                    "user_id": user_id,
+                    "username": search_data.get("username", username),
+                    "full_name": search_data.get("full_name"),
+                    "is_private": search_data.get("is_private"),
+                    "is_verified": search_data.get("is_verified"),
+                    "profile_pic_url": search_data.get("profile_pic_url"),
+                })
+
+        # Fallback B: HTML Scraping (extracts meta tags — very reliable)
+        if not user_id:
+            print_status("Scraping public profile page...", "info")
+            scraped = api.scrape_profile_page(username)
+            if scraped and isinstance(scraped, dict) and scraped.get("page_loaded"):
+                # Try to get user ID from page metadata
+                recovered_id = scraped.get("recovered_user_id")
+                if recovered_id:
+                    user_id = recovered_id
+                    print_status(f"Recovered user ID from HTML: {user_id}", "success")
+
+                # Extract user data from embedded JSON if available
+                user_data = scraped.get("user_data")
+                if user_data and isinstance(user_data, dict):
+                    profile.update({
+                        "user_id": user_data.get("id") or user_id,
+                        "username": user_data.get("username", username),
+                        "full_name": user_data.get("full_name"),
+                        "biography": user_data.get("biography"),
+                        "is_private": user_data.get("is_private"),
+                        "follower_count": user_data.get("edge_followed_by", {}).get("count", 0),
+                        "following_count": user_data.get("edge_follow", {}).get("count", 0),
+                    })
+                else:
+                    # Use meta tag data as final fallback
+                    print_status("Extracting from page meta tags...", "info")
+                    profile["username"] = profile.get("username") or scraped.get("username", username)
+                    profile["full_name"] = profile.get("full_name") or scraped.get("full_name")
+                    profile["is_private"] = scraped.get("is_private")
+                    profile["profile_pic_url"] = profile.get("profile_pic_url") or scraped.get("profile_pic_url")
+
+                    # Parse raw counts from meta description
+                    for key, raw_key in [("follower_count", "follower_count_raw"),
+                                         ("following_count", "following_count_raw"),
+                                         ("media_count", "post_count_raw")]:
+                        raw = scraped.get(raw_key)
+                        if raw and not profile.get(key):
+                            profile[key] = _parse_count(raw)
+
+                    if profile.get("full_name") or profile.get("follower_count"):
+                        print_status("Recovered basic profile from HTML page", "success")
+            elif scraped and scraped.get("error") == "not_found":
+                print_status(f"@{username} does not exist (404)", "error")
+                return None
+
+    # If we still have no user_id but DO have scraped data, proceed anyway
+    if not user_id and not profile.get("full_name") and not profile.get("follower_count"):
+        print_status(f"Could not retrieve data for @{username}", "error")
+        print_status("Tip: Use a session ID (-s) for most reliable access", "dim")
         return None
 
-    user = web_data.get("data", {}).get("user")
-    if not user:
-        print_status("User not found", "error")
-        return None
-
-    user_id = user.get("id")
-    profile = {
-        "user_id": user_id,
-        "username": user.get("username"),
-        "full_name": user.get("full_name"),
-        "biography": user.get("biography"),
-        "bio_links": [link.get("url") for link in user.get("bio_links", [])],
-        "external_url": user.get("external_url"),
-        "profile_pic_url": user.get("profile_pic_url_hd"),
-        "is_private": user.get("is_private"),
-        "is_verified": user.get("is_verified"),
-        "is_business": user.get("is_business_account"),
-        "business_category": user.get("category_name"),
-        "follower_count": user.get("edge_followed_by", {}).get("count", 0),
-        "following_count": user.get("edge_follow", {}).get("count", 0),
-        "media_count": user.get("edge_owner_to_timeline_media", {}).get("count", 0),
-        "is_joined_recently": user.get("is_joined_recently"),
-        "has_channel": user.get("has_channel"),
-        "has_guides": user.get("has_guides"),
-        "highlight_reel_count": user.get("highlight_reel_count"),
-        "has_clips": user.get("has_clips"),
-        "pronouns": user.get("pronouns", []),
-        "is_professional": user.get("is_professional_account"),
-        "category_enum": user.get("category_enum"),
-    }
+    # Set defaults
+    profile.setdefault("username", username)
+    profile.setdefault("user_id", user_id)
 
     # Step 2: Private API info (requires session — works on BOTH public and private)
     if user_id and api.has_session:
@@ -212,8 +281,44 @@ def extract_profile(api, username):
             profile["date_verified"] = about_parsed.get("date_verified")
             profile["about_raw"] = about_parsed
 
+    # Step 6: Advanced OSINT Analysis (Regex extraction & categorization)
+    print_status("Running Advanced OSINT Analysis...", "info")
+    profile["inferred_category"] = _categorize_account(profile)
+    
+    bio_text = profile.get("biography", "")
+    profile["extracted_entities"] = _extract_entities_from_text(bio_text)
+    profile["crypto_wallets"] = _extract_crypto_wallets(bio_text)
+    
+    # Also check external URL for PGP or Crypto
+    external_url = profile.get("external_url", "")
+    if external_url:
+        crypto_links = _extract_crypto_wallets(external_url)
+        for k, v in crypto_links.items():
+            if isinstance(v, list):
+                profile["crypto_wallets"].setdefault(k, []).extend(v)
+            else:
+                profile["crypto_wallets"][k] = v
+
     print_status("Profile extraction complete", "success")
     return profile
+
+
+def _parse_count(raw):
+    """Parse a raw count string like '1,234', '10.5K', '2.3M', '1B' into an integer."""
+    if not raw:
+        return 0
+    raw = raw.strip().replace(",", "")
+    try:
+        # Handle K/M/B suffixes
+        if raw.upper().endswith("B"):
+            return int(float(raw[:-1]) * 1_000_000_000)
+        elif raw.upper().endswith("M"):
+            return int(float(raw[:-1]) * 1_000_000)
+        elif raw.upper().endswith("K"):
+            return int(float(raw[:-1]) * 1_000)
+        return int(float(raw))
+    except (ValueError, TypeError):
+        return 0
 
 
 def _estimate_account_age(user_id):
@@ -275,6 +380,73 @@ def _calculate_engagement(web_data, follower_count):
         return round(rate, 2)
     except:
         return None
+
+
+def _extract_entities_from_text(text):
+    """Extract emails, phone numbers, and URLs from plain text using Regex."""
+    if not text:
+        return {}
+    import re
+    entities = {}
+    
+    # Emails
+    emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+    if emails:
+        entities['emails'] = list(set(emails))
+        
+    # Phone Numbers (International formats)
+    phones = re.findall(r'(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+    if phones:
+        entities['phones'] = list(set(phones))
+        
+    return entities
+
+
+def _extract_crypto_wallets(text):
+    """Extract cryptocurrency addresses (BTC, ETH, etc.) and PGP links."""
+    if not text:
+        return {}
+    import re
+    crypto = {}
+    
+    # Bitcoin (P2PKH, P2SH, Bech32)
+    btc = re.findall(r'\b(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{39,59})\b', text)
+    if btc: crypto['bitcoin'] = list(set(btc))
+        
+    # Ethereum (ERC-20 / ETH wallets)
+    eth = re.findall(r'\b(0x[a-fA-F0-9]{40})\b', text)
+    if eth: crypto['ethereum'] = list(set(eth))
+        
+    # PGP references
+    if 'pgp' in text.lower() or 'keybase.io' in text.lower():
+        crypto['pgp_mentioned'] = True
+        
+    return crypto
+
+
+def _categorize_account(profile_data):
+    """Heuristic categorization of the account based on stats and flags."""
+    followers = profile_data.get('follower_count', 0)
+    following = profile_data.get('following_count', 0)
+    media = profile_data.get('media_count', 0)
+    
+    if profile_data.get('is_business') or profile_data.get('is_professional_account'):
+        return "Business / Brand"
+        
+    if profile_data.get('is_verified'):
+        return "Verified Celeb / Influencer"
+        
+    if followers > 50000:
+        return "Influencer / Creator"
+        
+    # Bot / Fake detection heuristics
+    if following > 2000 and followers < 100 and media < 5:
+        return "High Probability Bot / Mass Follower"
+        
+    if followers == 0 and media == 0 and following > 50:
+        return "Likely Bot / Lurker"
+        
+    return "Personal / Standard"
 
 
 def _parse_about_data(response):
@@ -411,6 +583,30 @@ def display_profile(profile):
     print_field("Date Verified", profile.get("date_verified"))
     print_field("Last Post Date", profile.get("last_post_date"))
     print_field("Active Stories", profile.get("active_stories_count"))
+    
+    # NEW OSINT Extractions Display
+    print_section("ADVANCED OSINT ANALYSIS")
+    
+    category = profile.get("inferred_category")
+    if category:
+        color = C.ERROR if "Bot" in category else C.SUCCESS if "Influencer" in category else C.VALUE
+        print_field("Inferred Category", f"{color}{category}{C.RESET}")
+        
+    entities = profile.get("extracted_entities", {})
+    if entities:
+        if entities.get("emails"):
+            print_field("Bio Emails", ", ".join(entities["emails"]))
+        if entities.get("phones"):
+            print_field("Bio Phones", ", ".join(entities["phones"]))
+            
+    crypto = profile.get("crypto_wallets", {})
+    if crypto:
+        if crypto.get("bitcoin"):
+            print_field("BTC Wallets", f"{C.WARNING}" + ", ".join(crypto["bitcoin"]) + f"{C.RESET}")
+        if crypto.get("ethereum"):
+            print_field("ETH Wallets", f"{C.LINK}" + ", ".join(crypto["ethereum"]) + f"{C.RESET}")
+        if crypto.get("pgp_mentioned"):
+            print_field("PGP Keys", f"{C.SUCCESS}Found PGP references in bio/links{C.RESET}")
     print_field("Running Ads", bool_icon(profile.get("is_running_ads")) if profile.get("is_running_ads") is not None else None)
     print_field("Memorial Account", bool_icon(profile.get("is_memorialized")) if profile.get("is_memorialized") is not None else None)
     print_field("New to Instagram", bool_icon(profile.get("is_new_to_instagram")) if profile.get("is_new_to_instagram") is not None else None)

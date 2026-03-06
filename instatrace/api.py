@@ -85,6 +85,7 @@ class InstaAPI:
             dict or None
         """
         retries = retries or config.MAX_RETRIES
+        last_status = None
 
         for attempt in range(1, retries + 1):
             try:
@@ -95,6 +96,7 @@ class InstaAPI:
                     params=params, data=data, headers=headers,
                     timeout=config.REQUEST_TIMEOUT
                 )
+                last_status = resp.status_code
 
                 if resp.status_code == 429:
                     wait = min(2 ** attempt, 30)
@@ -124,6 +126,8 @@ class InstaAPI:
             time.sleep(1)
 
         config.print_status("All retries exhausted", "error")
+        if last_status == 429:
+            return {"error": "rate_limited", "status_code": 429}
         return None
 
     def graphql(self, query_hash, variables):
@@ -179,44 +183,124 @@ class InstaAPI:
         return self.request(url, headers={"User-Agent": "Instagram 64.0.0.14.96"})
 
     def scrape_profile_page(self, username):
-        """Scrape the public Instagram profile page HTML for embedded JSON data.
-        Fallback method — can extract data even without API access."""
+        """
+        Scrape public profile page for embedded JSON data.
+        Fallback when JSON API is rate-limited. Uses urllib to bypass `requests` blocks.
+        """
         url = f"https://www.instagram.com/{username}/"
         headers = {
             "User-Agent": config.random_ua(),
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Language": "en-US,en;q=0.5",
         }
         try:
-            resp = self.session.get(url, headers=headers, timeout=config.REQUEST_TIMEOUT)
-            if resp.status_code != 200:
-                return None
-            # Try to extract shared_data JSON from page
-            matches = re.findall(r'window\._sharedData\s*=\s*({.+?});', resp.text)
-            if matches:
-                return json.loads(matches[0])
-            # Try script type="application/json" blocks
-            json_blocks = re.findall(r'<script type="application/json"[^>]*>(.+?)</script>', resp.text)
+            import urllib.request
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                resp = urllib.request.urlopen(req, timeout=config.REQUEST_TIMEOUT)
+                html = resp.read().decode('utf-8')
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return {"error": "not_found", "status_code": 404}
+                return {"error": f"HTTP {e.code}", "status_code": e.code}
+
+            result = {"raw_html_length": len(html), "page_loaded": True}
+
+            import re
+
+            # 1. Extract from <meta> og:description
+            # Format: "159 Followers, 140 Following, 0 Posts - See Instagram photos and videos from sanaahhh...!! (@zann.aahhhhhh)"
+            desc_match = re.search(r'<meta\s+(?:property="og:description"|name="description")\s+content="([^"]*)"', html)
+            if not desc_match:
+                desc_match = re.search(r'content="([^"]*)"[^>]*property="og:description"', html)
+            if desc_match:
+                desc = desc_match.group(1)
+                result["meta_description"] = desc
+                # Parse counts
+                counts = re.match(r'([\d.,KMB]+)\s+Followers?,\s*([\d.,KMB]+)\s+Following,\s*([\d.,KMB]+)\s+Posts?', desc)
+                if counts:
+                    result["follower_count_raw"] = counts.group(1)
+                    result["following_count_raw"] = counts.group(2)
+                    result["post_count_raw"] = counts.group(3)
+                # Parse full name
+                name_match = re.search(r'from\s+(.+?)\s*\(@', desc)
+                if name_match:
+                    result["full_name"] = name_match.group(1).strip()
+
+            # 2. Extract from <title>
+            # Format: "sanaahhh...!! (@zann.aahhhhhh) • Instagram photos and videos"
+            title_match = re.search(r'<title>([^<]+)</title>', html)
+            if title_match:
+                title = title_match.group(1)
+                result["page_title"] = title
+                tn = re.match(r'(.+?)\s*\(@([^)]+)\)', title)
+                if tn:
+                    result["full_name"] = result.get("full_name") or tn.group(1).strip()
+                    result["username"] = tn.group(2).strip()
+
+            # 3. Check for "This account is private" in HTML
+            if "This account is private" in html or "This Account is Private" in html:
+                result["is_private"] = True
+            else:
+                result["is_private"] = False
+
+            # 4. Look for User ID in page metadata
+            id_match = re.search(r'"(?:logging_page_id|page_id)":"profile_(\d+)"', html)
+            if not id_match:
+                id_match = re.search(r'"user_id":"(\d+)"', html)
+            if id_match:
+                result["recovered_user_id"] = id_match.group(1)
+
+            # 5. Try embedded JSON blocks
+            json_blocks = re.findall(r'window\._sharedData\s*=\s*({.+?});', html)
+            json_blocks += re.findall(r'>window\.__additionalDataLoaded\([^,]*,\s*({.*?})\);<', html)
+
             for block in json_blocks:
                 try:
                     data = json.loads(block)
                     if isinstance(data, dict):
-                        return data
+                        user = data.get("graphql", {}).get("user") or data.get("user")
+                        if user:
+                            if "id" in user: result["recovered_user_id"] = user["id"]
+                            result["user_data"] = user
                 except:
                     continue
-            return {"raw_html_length": len(resp.text)}
+
+            # 6. Profile picture URL from og:image
+            img_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]*)"', html)
+            if not img_match:
+                img_match = re.search(r'content="([^"]*)"[^>]*property="og:image"', html)
+            if img_match:
+                result["profile_pic_url"] = img_match.group(1)
+
+            return result
         except Exception as e:
             return None
 
     def advanced_lookup(self, username):
         """
         Post to the recovery endpoint to get obfuscated login info
-        (email/phone hints).
+        (email/phone hints). Uses urllib and a public proxy rotator 
+        to bypass strict IP-based 429 Rate Limits.
         """
+        import uuid
+        import urllib.request
+        import random
+        
+        guid = str(uuid.uuid4())
+        device_id = f"android-{guid.replace('-', '')[:16]}"
+        
+        payload_data = {
+            "q": username,
+            "skip_recovery": "1",
+            "guid": guid,
+            "device_id": device_id
+        }
+        
         payload = "signed_body=SIGNATURE." + quote_plus(dumps(
-            {"q": username, "skip_recovery": "1"},
-            separators=(",", ":")
+            payload_data, separators=(",", ":")
         ))
+        
         headers = {
             "Accept-Language": "en-US",
             "User-Agent": "Instagram 101.0.0.15.120",
@@ -227,8 +311,48 @@ class InstaAPI:
             "Connection": "keep-alive",
             "Content-Length": str(len(payload)),
         }
-        return self.request(config.USER_LOOKUP_URL, method="POST", data=payload, headers=headers)
+        
+        def _get_proxies():
+            try:
+                # Fetch a reliable list of hundreds of live free HTTP proxies (Elite, SSL enabled)
+                url = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=3000&country=all&ssl=all&anonymity=elite"
+                req = urllib.request.Request(url)
+                raw = urllib.request.urlopen(req, timeout=5).read().decode('utf-8').splitlines()
+                proxies = [p for p in raw if p.strip()]
+                random.shuffle(proxies)
+                return proxies
+            except Exception:
+                return []
 
+        # Try without proxy first
+        proxies_to_try = [None]  
+        
+        for proxy in proxies_to_try:
+            try:
+                if proxy:
+                    proxy_handler = urllib.request.ProxyHandler({'http': proxy, 'https': proxy})
+                    opener = urllib.request.build_opener(proxy_handler)
+                else:
+                    opener = urllib.request.build_opener()
+                    
+                req = urllib.request.Request(config.USER_LOOKUP_URL, data=payload.encode('utf-8'), headers=headers, method="POST")
+                resp = opener.open(req, timeout=7)
+                return json.loads(resp.read().decode('utf-8'))
+                
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    if proxy is None:
+                        config.print_status("IP strictly rate-limited for recovery lookup. Engaging proxy rotation...", "warning")
+                        # Add 15 random proxies to try list
+                        live_proxies = _get_proxies()
+                        proxies_to_try.extend(live_proxies[:15])
+                    continue
+                if proxy is None:
+                    return {"error": f"HTTP {e.code}", "status_code": e.code}
+            except Exception as e:
+                continue
+
+        return {"error": "rate_limited", "status_code": 429}
     def get_followers(self, user_id, max_id=None, count=100):
         """Get a page of followers for a user."""
         url = config.USER_FOLLOWERS_ENDPOINT.format(user_id)
