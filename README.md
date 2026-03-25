@@ -79,11 +79,6 @@
 
 ## 🚀 Installation
 
-### From PyPI
-```bash
-pip install instatrace
-```
-
 ### From Source
 ```bash
 git clone https://github.com/John-Varghese-EH/InstaTrace.git
